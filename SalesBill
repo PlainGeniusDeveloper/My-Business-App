@@ -1,0 +1,155 @@
+using MyBusiness.BusinessLayer;
+using Newtonsoft.Json;
+using System;
+using System.Data;
+using System.IO;
+using System.Web.UI;
+
+namespace MyBusiness
+{
+    public partial class SalesBill : System.Web.UI.Page
+    {
+        int invoiceId;
+        DataTable dtInvoiceDetail;
+        DataTable dtItemDetail;
+        DataTable dtCompanyDetail;
+        DataTable dt_HSN_Wise_Detail;
+
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            if (!this.IsPostBack)
+            {
+                try
+                {
+                    invoiceId = Convert.ToInt32(Request["SalesId"]);
+                    if (Convert.ToString(invoiceId).Trim() != string.Empty)
+                    {
+                        getSalesDetails();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError("Error in Page_Load: " + ex.Message);
+                    ScriptManager.RegisterStartupScript(this, GetType(), "Popup", "wentWrong();", true);
+                }
+            }
+        }
+
+        private void getSalesDetails()
+        {
+            try
+            {
+                BAL objSales_Details = new BAL();
+                DataSet dsSalesDetails = objSales_Details.getSalesInvoiceDetails(invoiceId);
+
+                if (dsSalesDetails != null && dsSalesDetails.Tables.Count > 0)
+                {
+                    setData(dsSalesDetails);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Error in getSalesDetails: " + ex.Message);
+                throw; // Re-throw the exception to be handled at a higher level if necessary
+            }
+        }
+
+        private void setData(DataSet dsDetails)
+        {
+            try
+            {
+                dtCompanyDetail = dsDetails.Tables[0];
+                dtInvoiceDetail = dsDetails.Tables[1];
+                dtItemDetail = dsDetails.Tables[2];
+                dt_HSN_Wise_Detail = dsDetails.Tables[3];
+
+                if (dtCompanyDetail.Rows.Count > 0)
+                {
+                    string JSONresult = JsonConvert.SerializeObject(dtCompanyDetail);
+                    companyProfileJSON.Value = JSONresult;
+
+                    string printType = Convert.ToString(dtCompanyDetail.Rows[0]["Print_Type"]);
+                    loadUserControl(printType);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Error in setData: " + ex.Message);
+                throw; // Re-throw the exception to be handled at a higher level if necessary
+            }
+        }
+
+        private void setJsonData()
+        {
+            try
+            {
+                if (dtInvoiceDetail.Rows.Count > 0)
+                {
+                    string JSONresult = JsonConvert.SerializeObject(dtInvoiceDetail);
+                    invoiceDetailJSON.Value = JSONresult;
+                }
+
+                if (dtItemDetail.Rows.Count > 0)
+                {
+                    string JSONresult = JsonConvert.SerializeObject(dtItemDetail);
+                    itemDetailJSON.Value = JSONresult;
+                }
+
+                if (dt_HSN_Wise_Detail.Rows.Count > 0)
+                {
+                    string JSONresult = JsonConvert.SerializeObject(dt_HSN_Wise_Detail);
+                    hsn_detail_JSON.Value = JSONresult;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Error in setJsonData: " + ex.Message);
+                throw; // Re-throw the exception to be handled at a higher level if necessary
+            }
+        }
+
+        private void loadUserControl(string printType)
+        {
+            try
+            {
+                string userControlPath = string.Empty;
+
+                switch (printType)
+                {
+                    case "tax_invoice_a5":
+                        userControlPath = "~/UserControl/TaxInvoice.ascx";
+                        break;
+                    case "bill_supply_a5":
+                        userControlPath = "~/UserControl/BillOfSupply.ascx";
+                        break;
+                    case "no_gst":
+                        userControlPath = "~/UserControl/NoGST.ascx";
+                        break;
+                    case "thermal_4mm":
+                        userControlPath = "~/UserControl/Thermal.ascx";
+                        break;
+                    case "medical_matrix":
+                        CrystalReportGenerator.GenerateMedicalBillReport(dtItemDetail, dtInvoiceDetail, dtCompanyDetail, CrystalReportViewer_Medical);
+                        ScriptManager.RegisterStartupScript(this, GetType(), "closeWindowScript", "window.close();", true);
+                        Response.Redirect("~/Pages/Dashboard.aspx"); // Redirect to the dashboard
+                        return; // Exit the method as no further action is required
+                    default:
+                        throw new Exception("Invalid print type: " + printType);
+                }
+
+                if (!String.IsNullOrEmpty(userControlPath))
+                {
+                    setJsonData();
+                    Control userControl = LoadControl(userControlPath);
+                    InvoiceUserControl.Controls.Add(userControl);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Error in loadUserControl: " + ex.Message);
+                throw; // Re-throw the exception to be handled at a higher level if necessary
+            }
+        }        
+
+    }
+}
